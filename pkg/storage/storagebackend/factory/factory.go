@@ -23,33 +23,46 @@ import (
 	"k8s.io/apiserver/pkg/storage/storagebackend"
 )
 
+var factories = map[string]StorageFactoryFunc{
+	storagebackend.StorageTypeETCD2: newETCD2Storage,
+	storagebackend.StorageTypeETCD3: newETCD3Storage,
+	storagebackend.StorageTypeUnset: newETCD3Storage,
+}
+
+var healthChecks = map[string]StorageHealthCheckFunc{
+	storagebackend.StorageTypeETCD2: newETCD2HealthCheck,
+	storagebackend.StorageTypeETCD3: newETCD3HealthCheck,
+	storagebackend.StorageTypeUnset: errHealthCheck,
+}
+
+func errHealthCheck(c storagebackend.Config) (func() error, error) {
+	return nil, fmt.Errorf("unknown storage type: %s", c.Type)
+}
+
+func Register(name string, factory StorageFactoryFunc, healthCheck StorageHealthCheckFunc) {
+	factories[name] = factory
+	healthChecks[name] = healthCheck
+}
+
 // DestroyFunc is to destroy any resources used by the storage returned in Create() together.
 type DestroyFunc func()
+type StorageFactoryFunc func(c storagebackend.Config) (storage.Interface, DestroyFunc, error)
+type StorageHealthCheckFunc func(c storagebackend.Config) (func() error, error)
 
 // Create creates a storage backend based on given config.
 func Create(c storagebackend.Config) (storage.Interface, DestroyFunc, error) {
-	switch c.Type {
-	case storagebackend.StorageTypeETCD2:
-		return newETCD2Storage(c)
-	case storagebackend.StorageTypeUnset, storagebackend.StorageTypeETCD3:
-		// TODO: We have the following features to implement:
-		// - Support secure connection by using key, cert, and CA files.
-		// - Honor "https" scheme to support secure connection in gRPC.
-		// - Support non-quorum read.
-		return newETCD3Storage(c)
-	default:
+	factory, ok := factories[c.Type]
+	if !ok {
 		return nil, nil, fmt.Errorf("unknown storage type: %s", c.Type)
 	}
+	return factory(c)
 }
 
 // CreateHealthCheck creates a healthcheck function based on given config.
 func CreateHealthCheck(c storagebackend.Config) (func() error, error) {
-	switch c.Type {
-	case storagebackend.StorageTypeETCD2:
-		return newETCD2HealthCheck(c)
-	case storagebackend.StorageTypeUnset, storagebackend.StorageTypeETCD3:
-		return newETCD3HealthCheck(c)
-	default:
+	check, ok := healthChecks[c.Type]
+	if !ok {
 		return nil, fmt.Errorf("unknown storage type: %s", c.Type)
 	}
+	return check(c)
 }
