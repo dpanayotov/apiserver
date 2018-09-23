@@ -435,7 +435,12 @@ func (s *store) GuaranteedUpdate(
 }
 
 func (s *store) Count(key string) (int64, error) {
-	panic("implement me")
+	key = path.Join(s.pathPrefix, key)
+	getResp, err := s.client.List(context.Background(), key)
+	if err != nil {
+		return 0, err
+	}
+	return int64(len(getResp)), nil
 }
 
 func New(client Client, codec runtime.Codec, prefix string, transformer value.Transformer) storage.Interface {

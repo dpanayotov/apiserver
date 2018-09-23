@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/dpanayotov/apiserver/pkg/storage/kv"
+	"k8s.io/apiserver/pkg/storage/kv"
 )
 
 var (
